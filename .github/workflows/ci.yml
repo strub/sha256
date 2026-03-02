@@ -1,0 +1,114 @@
+name: SHA256
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 0'
+
+env:
+  OCAML_COMPILER_VERSION: '5.3.0'
+
+jobs:
+  prepare-opam:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_COMPILER_VERSION }}
+          opam-disable-sandboxing: true
+
+      - name: Compute submodule key
+        id: submods
+        run: echo "rev=$(git submodule status --recursive | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore opam cache
+        id: opam-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.opam
+            _opam
+          key: opam-${{ runner.os }}-${{ env.OCAML_COMPILER_VERSION }}-${{ steps.submods.outputs.rev }}
+
+      - name: Pin Jasmin from submodules
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        run: opam pin add -ny jasmin submodules/jasmin-compiler
+
+      - name: Pin EasyCrypt from submodules
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        run: opam pin add -ny easycrypt submodules/easycrypt
+
+      - name: Install Jasmin & EasyCrypt
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        run: opam install -y jasmin easycrypt
+
+      - name: Clean opam switch
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        run: opam clean -rsc
+
+      - name: Validate toolchain in opam root
+        run: |
+          opam exec -- which jasminc
+          opam exec -- which easycrypt
+
+      - name: Archive opam state (root + external switch)
+        run: |
+          tar -I "gzip --fast" -cf opam-root.tar.gz -C "$HOME" .opam
+          tar -I "gzip --fast" -cf opam-switch.tar.gz _opam
+
+      - name: Upload opam state
+        uses: actions/upload-artifact@v4
+        with:
+          name: opam-state-ocaml-${{ env.OCAML_COMPILER_VERSION }}
+          path: |
+            opam-root.tar.gz
+            opam-switch.tar.gz
+          compression-level: 0
+          retention-days: 1
+
+  build:
+    runs-on: ubuntu-latest
+    needs: prepare-opam
+    strategy:
+      matrix:
+        target: ['build', 'run-test', 'proofs']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_COMPILER_VERSION }}
+          opam-disable-sandboxing: true
+
+      - name: Download opam state
+        uses: actions/download-artifact@v4
+        with:
+          name: opam-state-ocaml-${{ env.OCAML_COMPILER_VERSION }}
+
+      - name: Restore opam state
+        run: |
+          rm -rf "$HOME"/.opam
+          tar -xf opam-root.tar.gz -C "$HOME"
+          tar -xf opam-switch.tar.gz
+          rm -f opam-root.tar.gz opam-state.tar.gz
+
+      - name: Validate restored toolchain
+        run: |
+          opam exec -- which jasminc
+          opam exec -- which easycrypt
+
+      - name: Build (${{matrix.target}})
+        run: opam exec -- make ${{matrix.target}}

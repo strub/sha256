@@ -1,0 +1,8 @@
+[submodule "submodules/jasmin-compiler"]
+	path = submodules/jasmin-compiler
+	url = https://gitlab.com/jasmin-lang/jasmin-compiler.git
+	branch = main
+[submodule "submodules/easycrypt"]
+	path = submodules/easycrypt
+	url = https://github.com/easycrypt/easycrypt.git
+	branch = main
