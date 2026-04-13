@@ -1,6 +1,5 @@
 src/*.o
-src/libsha256.a
-src/libsha512.a
+src/*.a
 test/*.o
 test/test_sha256
 test/test_sha512
