@@ -11,7 +11,7 @@ build:
 test: build
 	$(MAKE) -C test build
 
-run-test: build
+run-test: test
 	$(MAKE) -C test run-test
 
 proofs:

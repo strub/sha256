@@ -1,5 +1,7 @@
 src/*.o
 src/libsha256.a
+src/libsha512.a
 test/*.o
-test/test
+test/test_sha256
+test/test_sha512
 *.eco
